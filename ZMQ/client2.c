@@ -12,9 +12,19 @@ int main()
     char msg[] = "안녕 나는 두번째 클라이언트야~~";
     zmq_send(requester, msg, strlen(msg), 0); //메세지 전송
 
-    char buffer[128]={0};
-    zmq_recv(requester, buffer, 127, 0);  // 응답 수신
-    printf("서버 응답: 안녕 클라이언트2~ %s\n", buffer);
+
+    // 응답 수신    
+    for (int i = 0; i < 5; i++) {
+        char msg[128];
+        sprintf(msg, "센서값: %d", i * 10);
+        zmq_send(requester, msg, strlen(msg), 0);
+    
+
+        zmq_recv(requester, msg, 127, 0);
+        printf("응답: %s\n", msg);
+        sleep(1);
+    }
+    
 
     zmq_close(requester);
     zmq_ctx_destroy(context);
