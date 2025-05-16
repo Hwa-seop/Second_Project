@@ -1,22 +1,22 @@
-# sensor_input.py
+# new_sensor.py
 import zmq
 
-# 주차 구역 목록
-zones = ["A1", "A2", "B1", "B2"]
+# 다른 주차 구역
+zones = ["C1", "C2", "D1", "D2"]
 occupied_zones = set()
 
-# ZMQ PUB 설정
+# PUB 소켓 생성 (다른 포트 사용)
 context = zmq.Context()
 socket = context.socket(zmq.PUB)
-socket.bind("tcp://*:5555")
+socket.bind("tcp://*:5566")
+
+print("🚘 보조 센서 시뮬레이터 실행 (C1~D2)")
+print("▶ 구역 이름 입력 시 주차 (예: C1)")
+print("▶ 'q 구역명' 입력 시 출차 (예: q C1)")
 
 def display_available_zones():
     available = [z for z in zones if z not in occupied_zones]
     print("\n🅿️ 현재 빈 주차 구역:", ", ".join(available) if available else "없음")
-
-print("🚗 주차장 시뮬레이터 실행")
-print("▶ 구역 이름 입력 시 주차 (예: A1)")
-print("▶ 'q 구역명' 입력 시 출차 (예: q A1)")
 
 while True:
     display_available_zones()
@@ -44,5 +44,4 @@ while True:
             print(f"✅ {user_input} 구역에 주차 완료")
 
     else:
-        print("❗올바른 입력 형식: 'A1', 'q A1'")
-
+        print("❗올바른 입력 형식: 'C1', 'q C1'")
