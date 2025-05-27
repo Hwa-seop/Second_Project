@@ -1,9 +1,10 @@
 #include <zmq.hpp>
 #include <iostream>
 
-int main() {
+int main()
+{
     zmq::context_t context(1);
-    zmq::socket_t socket(context, ZMQ_REQ); // 요청-응답 패턴 사용
+    zmq::socket_t socket(context, ZMQ_REQ);    // 요청-응답 패턴 사용
     socket.connect("tcp://192.168.0.54:5511"); // 서버 연결
 
     // 조건문으로 RFID 넘버가 존재하면 쿼리문에 RFID 넘버만 변수로 받아서 넣으면 될 것 같음
@@ -20,10 +21,12 @@ int main() {
 
     zmq::message_t reply;
     zmq::recv_result_t result = socket.recv(reply, zmq::recv_flags::none);
-    if (result.has_value()) {
+    if (result.has_value())
+    {
         std::cout << "Received message size: " << result.value() << std::endl;
     } // 응답 수신
-    std::cout << "서버 => " << std::string(static_cast<char*>(reply.data()), reply.size()) << std::endl <<std::flush;
+    std::cout << "서버 => " << std::string(static_cast<char *>(reply.data()), reply.size()) << std::endl
+              << std::flush;
 
     return 0;
 }

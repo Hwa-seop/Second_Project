@@ -10,7 +10,7 @@ def exit_program():
     socket_in.close()
     socket_out.close()
     socket_RC.close()
-    # socket_stop.close()
+    socket_stop.close()
     socket_parking.close()  # ZeroMQ 소켓 닫기
     context.term()   # ZeroMQ 컨텍스트 종료
     conn.close()     # 데이터베이스 연결 닫기
@@ -39,9 +39,9 @@ socket_RC.bind("tcp://*:6514")
 print("RC car 소켓 바인딩 완료...")
 
 # # RC car stop 수신용 ZeroMQ 소켓
-# socket_stop = context.socket(zmq.REP)
-# socket_stop.bind("tcp://*:6515")
-# print("stop 소켓 바인딩 완료...")
+socket_stop = context.socket(zmq.REP)
+socket_stop.bind("tcp://*:6515")
+print("stop 소켓 바인딩 완료...")
 
 # 주차칸 상태 수신용 ZeroMQ 소켓
 socket_parking = context.socket(zmq.REP)
@@ -52,6 +52,7 @@ conn = gui.sql.sql_connect()
 print("SQL연결 완료...")
 
 gui.update_parking()
+gui.update_rc()
 
 def send_initial_rfid_list_in():
     try:
@@ -105,21 +106,46 @@ def parking_in():
     except gui.sql.pymysql.MySQLError as e:
         print(f"초기 데이터 조회 오류: {e}")  
         
-# def parking_in_stop():
-#     try:
-#         # 정지신호 전송
-#         response = 'stop'
-#         socket_stop.send_string(response)  # 클라이언트로 데이터 전송
-#         print(f"rc 데이터 전송: {response}")
+def rc_stop():
+    try:
+        # 정지신호 전송
+        try:
+            cursor = conn.cursor()
+            query = "INSERT INTO rc_stop (status, stop_time) VALUES ('stop', NOW());"
+            cursor.execute(query) 
+            conn.commit()  # 변경 사항 저장
+            print("stop 트랜잭션 정상 완료")
+        except gui.sql.pymysql.MySQLError as e:
+            print(f"....오류 발생: {e}")
+        finally:
+            gui.update_parking()
         
-#     except gui.sql.pymysql.MySQLError as e:
-#         print(f"초기 데이터 조회 오류: {e}")  
+    except gui.sql.pymysql.MySQLError as e:
+        print(f"초기 데이터 조회 오류: {e}")
+
+def rc_move():
+    try:
+        # move신호 전송
+        try:
+            cursor = conn.cursor()
+            query = "INSERT INTO rc_stop (status, move_time) VALUES ('moving', NOW());"
+            cursor.execute(query) 
+            conn.commit()  # 변경 사항 저장
+            print("move 트랜잭션 정상 완료")
+        except gui.sql.pymysql.MySQLError as e:
+            print(f"....오류 발생: {e}")
+        finally:
+            gui.update_parking()
+        
+    except gui.sql.pymysql.MySQLError as e:
+        print(f"초기 데이터 조회 오류: {e}")
         
 def parking_out(rfid_id):
     try:
         cursor = conn.cursor()
         query = f"SELECT total_usage_time FROM parking_log WHERE RFID_num = {rfid_id} ORDER BY exit_time DESC LIMIT 1;"
         cursor.execute(query)
+        conn.commit()  # 변경 사항 저장
         usage_time = cursor.fetchone() # 현재 입차 차량 RFID 리스트
         if usage_time:  # 데이터가 존재하는 경우
             socket_out.send_string(str(usage_time[0]))  # 클라이언트로 데이터 전송
@@ -142,9 +168,6 @@ def parking_in_listen():
         elif message == "REQUEST_SLOTS":
             parking_in()
             continue   
-        # elif message == "stop":
-        #     parking_in_stop()
-        #     continue   
         response = f"response: {message.upper()}"
         socket_in.send_string(response)  # 응답 전송          
         try:
@@ -153,7 +176,7 @@ def parking_in_listen():
             conn.commit()  # 변경 사항 저장
             print("RFID 트랜잭션 정상 완료")
         except gui.sql.pymysql.MySQLError as e:
-            print(f"오류 발생: {e}")
+            print(f"!!!오류 발생: {e}")
             conn.rollback()
         finally:
             gui.update_parking()
@@ -182,11 +205,30 @@ def parking_out_listen():
             conn.commit()  # 변경 사항 저장
             print("RFID 트랜잭션 정상 완료")
         except gui.sql.pymysql.MySQLError as e:
-            print(f"오류 발생: {e}")
+            print(f"....오류 발생: {e}")
             conn.rollback()
         finally:
             gui.update_parking()
             
+        if not gui.root.winfo_exists():
+            exit_program()
+            break
+
+def status_rc_listen():
+    while True:
+        message = socket_stop.recv_string()  # 클라이언트로부터 메시지 수신
+        print(f"받은 메시지: {message}")
+        
+        response = f"response: {message.upper()}"
+        socket_stop.send_string(response)  # 응답 전송
+        
+        if message == 'stop':
+            rc_stop()
+        elif message == "moving":
+            rc_move()
+            
+        gui.update_rc()
+
         if not gui.root.winfo_exists():
             exit_program()
             break
@@ -250,6 +292,7 @@ def parking_status_listen():
 # ZeroMQ 서버를 스레드에서 실행
 threading.Thread(target=parking_in_listen, daemon=True).start()
 threading.Thread(target=parking_out_listen, daemon=True).start()
+threading.Thread(target=status_rc_listen, daemon=True).start()
 threading.Thread(target=parking_RC_listen, daemon=True).start()
 threading.Thread(target=parking_status_listen, daemon=True).start()
 print("ZMQ 스레딩 시작")
@@ -274,4 +317,3 @@ gui.root.mainloop()
 # sudo dpkg -i mysql-apt-config_0.8.15-1_all.deb
 # sudo apt-get update
 # sudo apt-get install mysql-server
-
